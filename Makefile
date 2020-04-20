@@ -1,6 +1,7 @@
 BINARY=zgit
 
 build:
+	zig fmt *.zig
 	zig build-exe *.zig
 
 clean:
