@@ -19,26 +19,18 @@ pub fn initializeRepo(path: []const u8) !Dir {
     return tree;
 }
 
-pub fn getRepo(cwd: Dir, path: []const u8) !Dir {
+pub fn getRepo(cwd: Dir, path: []const u8) ?Dir {
     // refactor so these functions are called separately in the caller
-    var tree = try cwd.openDir(path, .{ .access_sub_paths = true, .iterate = true });
-
-    tree.access(".git", .{ .read = true }) catch |e| {
-        return error.NotAGitRepo;
-    };
-
+    var tree = cwd.openDir(path, .{ .access_sub_paths = true, .iterate = true }) catch return null;
+    tree.access(".git", .{ .read = true }) catch return null;
     return tree;
 }
 
 const Repo = struct {
     tree: Dir,
 
-    pub fn init(path: []const u8) !*Repo {
-        var cwd = std.fs.cwd();
-        var work = getRepo(cwd, path) catch |err| switch (err) {
-            error.FileNotFound => try initializeRepo(path),
-            else => return err,
-        };
+    pub fn init(cwd: Dir) !*Repo {
+        var work = getRepo(cwd, ".") orelse return error.NotAGitRepo;
 
         var repo = try alloc.create(Repo);
         repo.* = Repo{
@@ -49,24 +41,23 @@ const Repo = struct {
     }
 };
 
-pub fn init(path: ?[]const u8) void {
+pub fn cmdInit(path: ?[]const u8) !void {
     const clone = path orelse ".";
     warn("cloning: {}\n", .{clone});
-    var repo = Repo.init(clone);
+    var tree = try initializeRepo(clone);
+    var repo = Repo.init(tree);
 }
 
-pub fn status() !void {
+pub fn cmdStatus() !void {
     var cwd = std.fs.cwd();
     while (true) {
-        var repo = getRepo(cwd, ".") catch |err| switch (err) {
-            error.NotAGitRepo => {
-                cwd = try cwd.openDir("..", .{ .access_sub_paths = true });
-                continue;
-            },
-            else => return err,
-        };
-        std.debug.warn("repo: {}", .{repo});
-        return;
+        if (getRepo(cwd, ".")) |dir| {
+            std.debug.warn("repo: {}", .{Repo.init(dir)});
+            return;
+        } else {
+            cwd = try cwd.openDir("..", .{ .access_sub_paths = true });
+            continue;
+        }
     }
 }
 
@@ -76,9 +67,9 @@ pub fn main() void {
     if (args.next()) |command| {
         warn("command: {}\n", .{command});
         if (std.mem.eql(u8, command, "init")) {
-            init(args.next());
+            const err = cmdInit(args.next());
         } else if (std.mem.eql(u8, command, "status")) {
-            var f = status();
+            const err = cmdStatus();
         }
     } else {
         warn("TODO print help\n", .{});
