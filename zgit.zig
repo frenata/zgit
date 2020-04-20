@@ -67,5 +67,7 @@ pub fn main() void {
         if (std.mem.eql(u8, command, "init")) {
             init(args.next());
         }
+    } else {
+        warn("TODO print help\n", .{});
     }
 }
