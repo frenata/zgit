@@ -50,12 +50,26 @@ pub fn cmdInit(path: ?[]const u8) !void {
 
 pub fn cmdStatus() !void {
     var cwd = std.fs.cwd();
+    cwd = try cwd.openDir(".", .{});
+    warn("cwd fd: {}\n", .{cwd.fd});
     while (true) {
+        warn("iterate upwards\n", .{});
         if (getRepo(cwd, ".")) |dir| {
             std.debug.warn("repo: {}", .{Repo.init(dir)});
             return;
         } else {
-            cwd = try cwd.openDir("..", .{ .access_sub_paths = true });
+            var nwd = cwd.openDir("..", .{ .access_sub_paths = true }) catch |err| {
+                warn("err: {}", .{err});
+                return err;
+            };
+            var nwd_stat = try std.os.fstat(nwd.fd);
+            var cwd_stat = try std.os.fstat(cwd.fd);
+            warn("inodes: {} {}\n", .{ cwd_stat.ino, nwd_stat.ino });
+            if (nwd_stat.ino == cwd_stat.ino) {
+                warn("hit the root: {}", .{cwd_stat.ino});
+                return error.NotAGitRepo;
+            }
+            cwd = nwd;
             continue;
         }
     }
@@ -67,9 +81,9 @@ pub fn main() void {
     if (args.next()) |command| {
         warn("command: {}\n", .{command});
         if (std.mem.eql(u8, command, "init")) {
-            const err = cmdInit(args.next());
+            warn("{}", .{cmdInit(args.next())});
         } else if (std.mem.eql(u8, command, "status")) {
-            const err = cmdStatus();
+            warn("{}", .{cmdStatus()});
         }
     } else {
         warn("TODO print help\n", .{});
