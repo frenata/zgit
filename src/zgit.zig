@@ -13,7 +13,22 @@ pub fn initializeRepo(path: []const u8) !Dir {
         else => return err,
     };
     var tree = try cwd.openDir(path, .{ .access_sub_paths = true, .iterate = true });
-    try tree.makeDir(".git");
+    try tree.makePath(".git/objects");
+    try tree.makePath(".git/refs/heads");
+    try tree.makePath(".git/refs/tags");
+    const git = try tree.openDir(".git", .{});
+
+    const head = try git.createFile("HEAD", .{.exclusive = true});
+    defer head.close();
+    _ = try head.write("ref: refs/heads/master\n");
+
+    const description = try git.createFile("description", .{.exclusive=true});
+    defer description.close();
+    _ = try description.write("Unnamed repository; edit this file 'description' to name the repository.\n");
+
+    const config = try git.createFile("config", .{.exclusive=true});
+    defer config.close();
+    _ = try config.write(default_config());
 
     warn("new repo initialized: {}\n", .{path});
     return tree;
@@ -88,4 +103,16 @@ pub fn main() void {
     } else {
         warn("TODO print help\n", .{});
     }
+}
+
+fn default_config() []const u8 {
+    // A library to read/write INI files would be nice. ;)
+    // This will do for now.
+    const bytes =
+        \\[core]
+        \\  repositoryformatversion = 0
+        \\  filemode = false
+        \\  bare = false
+    ;
+    return bytes;
 }
